@@ -20,8 +20,8 @@ def prepare_data(dataset):
         patient = dataset[i]
         feats = extract_patient_features(patient["ed_mask"], patient["es_mask"], patient["spacing"])
         X.append([
-            feats["LV_EDV"], feats["LV_ESV"], feats["LV_EF"],
-            feats["RV_EDV"], feats["RV_ESV"], feats["RV_EF"],
+            feats["LV_EDV"], feats["LV_ESV"], feats["LV_SV"], feats["LV_EF"],
+            feats["RV_EDV"], feats["RV_ESV"], feats["RV_SV"], feats["RV_EF"],
             feats["Myo_Mass"], feats["LV_RV_Ratio"], feats["Mass_Vol_Ratio"]
         ])
         y.append(patient["diagnosis"])

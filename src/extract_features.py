@@ -27,9 +27,13 @@ def extract_patient_features(ed_mask, es_mask, spacing):
     
     ed_myo_vol = calculate_volume(ed_mask, 2, spacing) / 1000.0
     
+    # Stroke Volumes
+    lv_sv = ed_lv_vol - es_lv_vol
+    rv_sv = ed_rv_vol - es_rv_vol
+    
     # Ejection Fraction
-    lv_ef = (ed_lv_vol - es_lv_vol) / (ed_lv_vol + 1e-8) * 100
-    rv_ef = (ed_rv_vol - es_rv_vol) / (ed_rv_vol + 1e-8) * 100
+    lv_ef = lv_sv / (ed_lv_vol + 1e-8) * 100
+    rv_ef = rv_sv / (ed_rv_vol + 1e-8) * 100
     
     # Ratios (Extra features for fine-tuning)
     lv_rv_ratio = ed_lv_vol / (ed_rv_vol + 1e-8)
@@ -38,9 +42,11 @@ def extract_patient_features(ed_mask, es_mask, spacing):
     features = {
         "LV_EDV": ed_lv_vol,
         "LV_ESV": es_lv_vol,
+        "LV_SV": lv_sv,
         "LV_EF": lv_ef,
         "RV_EDV": ed_rv_vol,
         "RV_ESV": es_rv_vol,
+        "RV_SV": rv_sv,
         "RV_EF": rv_ef,
         "Myo_Mass": ed_myo_vol * 1.05,
         "LV_RV_Ratio": lv_rv_ratio,
@@ -50,19 +56,6 @@ def extract_patient_features(ed_mask, es_mask, spacing):
     return features
 
 if __name__ == "__main__":
-    # Mock test
-    print("Testing feature extraction...")
-    mask_ed = np.zeros((10, 256, 256))
-    mask_ed[:, 100:150, 100:150] = 3 # LV
-    mask_ed[:, 50:100, 50:100] = 1 # RV
-    mask_ed[:, 100:110, 100:150] = 2 # Myo
-    
-    mask_es = np.zeros((10, 256, 256))
-    mask_es[:, 110:140, 110:140] = 3 # LV smaller
-    mask_es[:, 60:90, 60:90] = 1 # RV smaller
-    
-    spacing = (1.5, 1.5, 10.0)
-    
-    feats = extract_patient_features(mask_ed, mask_es, spacing)
-    for k, v in feats.items():
-        print(f"{k}: {v:.2f}")
+    # This module is intended to be imported.
+    # Use train_classifier.py to extract features for the full dataset.
+    pass

@@ -35,10 +35,14 @@ class GradCAM:
         
         # Guided Grad-CAM
         weights = torch.mean(self.gradients, dim=(2, 3), keepdim=True)
-        cam = torch.sum(weights * self.activations, dim=1).squeeze()
+        cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
         
         cam = F.relu(cam)
-        cam = cam.cpu().detach().numpy()
+        
+        # Upsample to input size
+        cam = F.interpolate(cam, size=(input_tensor.shape[2], input_tensor.shape[3]), mode='bilinear', align_corners=False)
+        
+        cam = cam.squeeze().cpu().detach().numpy()
         cam = (cam - np.min(cam)) / (np.max(cam) - np.min(cam) + 1e-8)
         return cam
 

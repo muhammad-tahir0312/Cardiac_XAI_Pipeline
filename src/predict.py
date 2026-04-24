@@ -40,10 +40,27 @@ def run_pipeline(patient_idx=0):
     ed_mask = patient["ed_mask"]
     es_mask = patient["es_mask"]
     
-    # Visualization
-    visualize_segmentation(patient["ed_mask"][len(patient["ed_mask"])//2], 
-                           patient["ed_mask"][len(patient["ed_mask"])//2], 
-                           patient["ed_mask"][len(patient["ed_mask"])//2],
+    # Segmentation Visualization: MRI Image vs GT Mask vs Model Prediction
+    mid = len(ed_mask) // 2
+    mri_slice = patient["ed_image"][mid].astype(np.float32)
+    mri_slice = (mri_slice - np.min(mri_slice)) / (np.max(mri_slice) - np.min(mri_slice) + 1e-8)
+    gt_mask = ed_mask[mid]
+    
+    if os.path.exists(config.SEG_MODEL_PATH):
+        # Get actual model prediction
+        from dataloader import ACDC_Dataset
+        pad_crop = ACDC_Dataset._pad_or_crop
+        dummy_ds = ACDC_Dataset.__new__(ACDC_Dataset)
+        input_img = dummy_ds._pad_or_crop(mri_slice, (256, 256))
+        input_t = torch.from_numpy(input_img).unsqueeze(0).unsqueeze(0).to(device)
+        model_seg.eval()
+        with torch.no_grad():
+            pred = torch.argmax(model_seg(input_t), dim=1)[0].cpu().numpy()
+        pred_mask = pred
+    else:
+        pred_mask = gt_mask  # Fallback
+    
+    visualize_segmentation(mri_slice, gt_mask, pred_mask,
                            save_name=f"seg_viz_{p_id}.png")
     
     # 3. Feature Extraction
@@ -57,8 +74,8 @@ def run_pipeline(patient_idx=0):
     if os.path.exists(clf_path):
         clf = joblib.load(clf_path)
         feature_vector = np.array([[
-            features["LV_EDV"], features["LV_ESV"], features["LV_EF"],
-            features["RV_EDV"], features["RV_ESV"], features["RV_EF"],
+            features["LV_EDV"], features["LV_ESV"], features["LV_SV"], features["LV_EF"],
+            features["RV_EDV"], features["RV_ESV"], features["RV_SV"], features["RV_EF"],
             features["Myo_Mass"], features["LV_RV_Ratio"], features["Mass_Vol_Ratio"]
         ]])
         prediction_idx = clf.predict(feature_vector)[0]
@@ -84,7 +101,10 @@ def run_pipeline(patient_idx=0):
         model.eval()
         
         # Prep input (single slice for demo)
-        input_slice = patient["ed_mask"][len(patient["ed_mask"])//2] # middle slice
+        mid_idx = len(patient["ed_image"]) // 2
+        input_slice = patient["ed_image"][mid_idx].astype(np.float32)
+        # Normalize
+        input_slice = (input_slice - np.min(input_slice)) / (np.max(input_slice) - np.min(input_slice) + 1e-8)
         input_tensor = torch.from_numpy(input_slice).unsqueeze(0).unsqueeze(0).to(device)
         
         with torch.no_grad():

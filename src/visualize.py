@@ -102,8 +102,11 @@ def visualize_segmentation(image, target, pred, save_name="seg_viz.png"):
     plt.title("AI Prediction")
     plt.axis('off')
     
+    # Add a global title with patient ID
+    plt.suptitle(f"Segmentation Results for {save_name.replace('seg_viz_', '').replace('.png', '')}")
+    
     os.makedirs(config.RESULTS_DIR, exist_ok=True)
-    plt.savefig(os.path.join(config.RESULTS_DIR, save_name))
+    plt.savefig(os.path.join(config.RESULTS_DIR, save_name), dpi=300, bbox_inches='tight')
     plt.close()
 
 def visualize_feature_maps(model, input_slice, save_name="feature_maps.png"):
@@ -140,9 +143,13 @@ def plot_clinical_boxplots(X, y, feature_names, save_name="clinical_distribution
     df = pd.DataFrame(X, columns=feature_names)
     df['Diagnosis'] = y
     
-    plt.figure(figsize=(20, 15))
+    num_features = len(feature_names)
+    cols = 3
+    rows = (num_features + cols - 1) // cols
+    
+    plt.figure(figsize=(20, 5 * rows))
     for i, col in enumerate(feature_names):
-        plt.subplot(3, 3, i+1)
+        plt.subplot(rows, cols, i+1)
         sns.boxplot(x='Diagnosis', y=col, data=df, palette='Set2')
         plt.title(f"Distribution of {col}")
         
