@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Data and Models (Large Files)
+data/
+models/
+
+# Results (Generated Content)
+results/*.png
+results/*.json
+results/*.joblib
+results/*.pth
+
+# Logs and OS
+*.log
+.DS_Store
+.ipynb_checkpoints/
