@@ -6,6 +6,7 @@ import shap
 import matplotlib.pyplot as plt
 import os
 import joblib
+import config
 
 class GradCAM:
     def __init__(self, model, target_layer):
@@ -27,14 +28,17 @@ class GradCAM:
         self.gradients = grad_output[0]
 
     def generate_heatmap(self, input_tensor, class_idx):
+        input_tensor.requires_grad = True
         self.model.zero_grad()
         output = self.model(input_tensor)
         
-        # If output is (Batch, Classes, H, W), we target the class
         one_hot = torch.zeros_like(output)
         one_hot[0][class_idx] = 1
         output.backward(gradient=one_hot, retain_graph=True)
         
+        if self.gradients is None or self.activations is None:
+            return np.zeros((input_tensor.shape[2], input_tensor.shape[3]))
+
         # Guided Grad-CAM
         weights = torch.mean(self.gradients, dim=(2, 3), keepdim=True)
         cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
@@ -64,7 +68,7 @@ def explain_diagnosis_shap(model, X_train, X_test, feature_names, save_path):
 
 if __name__ == "__main__":
     # Test SHAP with the trained model
-    model_path = "/home/tahir/Cardiac_XAI_Pipeline/results/diagnosis_classifier.joblib"
+    model_path = config.RF_MODEL_PATH
     if os.path.exists(model_path):
         print("Testing SHAP Explainer...")
         clf = joblib.load(model_path)

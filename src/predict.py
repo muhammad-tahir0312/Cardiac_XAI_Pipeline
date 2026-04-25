@@ -113,20 +113,26 @@ def run_pipeline(patient_idx=0):
             dense_probs = F.softmax(output, dim=1)[0].cpu().numpy()
 
     # SOTA Weighted Ensemble (Consensus)
-    # Clinical features are generally more reliable for ACDC, so we give XGBoost more weight
-    hybrid_probs = 0.7 * xgb_probs + 0.3 * dense_probs
+    # We use a 0.6/0.4 split to give more weight to clinical features while respecting visual cues
+    hybrid_probs = 0.6 * xgb_probs + 0.4 * dense_probs
     pred_idx = np.argmax(hybrid_probs)
     
-    class_map_inv = {0: "NOR", 1: "MINF", 2: "DCM", 3: "HCM", 4: "RV"}
+    class_map_inv = config.DIAGNOSIS_MAP_INV
     prediction = class_map_inv.get(pred_idx, "UNKNOWN")
     
-    print(f"\n--- SOTA Hybrid Diagnosis ---")
-    print(f"XGBoost Prediction: {class_map_inv.get(np.argmax(xgb_probs))}")
-    print(f"DenseNet Prediction: {class_map_inv.get(np.argmax(dense_probs))}")
-    print(f"FINAL CONSENSUS: {prediction} (Prob: {np.max(hybrid_probs):.2f})")
-    print(f"TRUE DIAGNOSIS: {patient['diagnosis']}")
+    print(f"\n" + "="*40)
+    print(f"   SOTA HYBRID DIAGNOSIS REPORT")
+    print(f"="*40)
+    print(f"Patient ID:        {p_id}")
+    print(f"XGBoost (Clinical): {class_map_inv.get(np.argmax(xgb_probs))} (Prob: {np.max(xgb_probs):.2f})")
+    print(f"DenseNet (Image):  {class_map_inv.get(np.argmax(dense_probs))} (Prob: {np.max(dense_probs):.2f})")
+    print(f"-"*40)
+    print(f"FINAL CONSENSUS:   {prediction} (Prob: {np.max(hybrid_probs):.2f})")
+    print(f"TRUE DIAGNOSIS:    {patient['diagnosis']}")
+    print(f"="*40)
 
-    # 4. Grad-CAM Visualization
+    # 4. Explainability (XAI)
+    # 4a. Grad-CAM for DenseNet
     if os.path.exists(densenet_path):
         print("\nGenerating SOTA Grad-CAM focus map...")
         target_layer = model_dense.densenet.features.denseblock4.denselayer16
@@ -134,10 +140,28 @@ def run_pipeline(patient_idx=0):
         heatmap = gcam.generate_heatmap(input_t, pred_idx)
         
         plt.figure(figsize=(10, 5))
-        plt.subplot(1, 2, 1); plt.imshow(ed_s, cmap='gray'); plt.title("Original MRI")
-        plt.subplot(1, 2, 2); plt.imshow(ed_s, cmap='gray'); plt.imshow(heatmap[0], cmap='jet', alpha=0.5)
+        plt.subplot(1, 2, 1); plt.imshow(ed_s, cmap='gray'); plt.title("Original MRI (ED)")
+        plt.subplot(1, 2, 2); plt.imshow(ed_s, cmap='gray'); plt.imshow(heatmap, cmap='jet', alpha=0.5)
         plt.title(f"Grad-CAM: {prediction}")
         plt.savefig(config.GRADCAM_PLOT_PATH)
+        plt.close()
+        print(f"Grad-CAM plot saved to {config.GRADCAM_PLOT_PATH}")
+
+    # 4b. Clinical Feature Explanation
+    if os.path.exists(clf_path):
+        print("Generating clinical feature importance...")
+        plt.figure(figsize=(10, 6))
+        vals = [features[k] for k in config.FEATURE_NAMES]
+        plt.barh(config.FEATURE_NAMES, vals, color='teal')
+        plt.title(f"Clinical Features for {p_id}")
+        plt.tight_layout()
+        plt.savefig(os.path.join(config.RESULTS_DIR, f"features_{p_id}.png"))
+        plt.close()
 
 if __name__ == "__main__":
-    run_pipeline(0)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--idx", type=int, default=0, help="Patient index in validation set")
+    args = parser.parse_args()
+    run_pipeline(args.idx)
+

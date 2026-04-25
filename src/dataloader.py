@@ -4,6 +4,7 @@ import SimpleITK as sitk
 import numpy as np
 from torch.utils.data import Dataset
 import torch
+import config
 
 # Silence SimpleITK warnings about NIfTI scales
 sitk.ProcessObject.SetGlobalWarningDisplay(False)
@@ -154,7 +155,7 @@ class ACDC_DiagnosisDataset(Dataset):
     def __init__(self, root_dir, split="train_set"):
         self.root_dir = os.path.join(root_dir, split)
         self.patient_dirs = sorted(glob.glob(os.path.join(self.root_dir, "patient*")))
-        self.class_map = {"NOR": 0, "MINF": 1, "DCM": 2, "HCM": 3, "RV": 4}
+        self.class_map = config.DIAGNOSIS_MAP
         
     def __len__(self):
         return len(self.patient_dirs)

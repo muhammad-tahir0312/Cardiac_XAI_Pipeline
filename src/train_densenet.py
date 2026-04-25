@@ -28,7 +28,7 @@ def train_densenet(args):
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     
     # Class mapping for diagnosis
-    class_map = {"NOR": 0, "MINF": 1, "DCM": 2, "HCM": 3, "RV": 4}
+    class_map = config.DIAGNOSIS_MAP
     
     # Calculate class weights for imbalance
     # We can just iterate once or use a fixed weight if data is balanced enough

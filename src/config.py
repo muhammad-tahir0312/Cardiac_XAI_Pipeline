@@ -36,3 +36,8 @@ FEATURE_NAMES = [
 # XAI Settings
 SHAP_PLOT_PATH = os.path.join(RESULTS_DIR, "shap_summary.png")
 GRADCAM_PLOT_PATH = os.path.join(RESULTS_DIR, "gradcam_result.png")
+
+# Unified Diagnosis Mapping (Alphabetical for consistency with LabelEncoder)
+DIAGNOSIS_CLASSES = ["DCM", "HCM", "MINF", "NOR", "RV"]
+DIAGNOSIS_MAP = {cls: i for i, cls in enumerate(DIAGNOSIS_CLASSES)}
+DIAGNOSIS_MAP_INV = {i: cls for i, cls in enumerate(DIAGNOSIS_CLASSES)}
