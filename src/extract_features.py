@@ -36,6 +36,15 @@ def extract_patient_features(ed_mask, es_mask, spacing, bsa=1.7):
     lv_ef = lv_sv / (ed_lv_vol + 1e-8) * 100
     rv_ef = rv_sv / (ed_rv_vol + 1e-8) * 100
     
+    # Advanced Metrics for SOTA
+    # 1. Myocardial Thickening Index (Crucial for MINF detection)
+    ed_myo_vol = calculate_volume(ed_mask, 2, spacing)
+    es_myo_vol = calculate_volume(es_mask, 2, spacing)
+    myo_thickening = (es_myo_vol - ed_myo_vol) / (ed_myo_vol + 1e-8) * 100
+    
+    # 2. RV FAC (Fractional Area Change - surrogate using volumes)
+    rv_fac = (ed_rv_vol - es_rv_vol) / (ed_rv_vol + 1e-8) * 100
+    
     # Ratios and Morphological Features
     lv_rv_ratio = ed_lv_vol / (ed_rv_vol + 1e-8)
     mass_vol_ratio = (ed_myo_vol * 1.05) / (ed_lv_vol + 1e-8)
@@ -67,7 +76,9 @@ def extract_patient_features(ed_mask, es_mask, spacing, bsa=1.7):
         "LVEDVi": ed_lv_index,
         "LVESVi": es_lv_index,
         "SVi": sv_index,
-        "Massi": mass_index
+        "Massi": mass_index,
+        "Myo_Thickening": myo_thickening,
+        "RV_FAC": rv_fac
     }
     
     return features

@@ -32,7 +32,7 @@ python src/train_classifier.py
 
 # 3. Train Image Diagnosis (DenseNet)
 echo -e "\n[Step 3/4] Training DenseNet Classifier..."
-python src/train_densenet.py --epochs 20
+python src/train_densenet.py --epochs 50
 
 # 4. Generate Predictions and XAI
 echo -e "\n[Step 4/4] Running Inference and Explanations..."

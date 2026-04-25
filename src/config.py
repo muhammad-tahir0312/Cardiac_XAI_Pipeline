@@ -29,7 +29,8 @@ FEATURE_NAMES = [
     "LV_EDV", "LV_ESV", "LV_SV", "LV_EF", 
     "RV_EDV", "RV_ESV", "RV_SV", "RV_EF", 
     "Myo_Mass", "LV_RV_Ratio", "Mass_Vol_Ratio",
-    "RWT", "LVEDVi", "LVESVi", "SVi", "Massi"
+    "RWT", "LVEDVi", "LVESVi", "SVi", "Massi",
+    "Myo_Thickening", "RV_FAC"
 ]
 
 # XAI Settings

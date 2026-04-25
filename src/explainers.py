@@ -19,7 +19,8 @@ class GradCAM:
         self.target_layer.register_full_backward_hook(self.save_gradient)
 
     def save_activation(self, module, input, output):
-        self.activations = output
+        # SOTA Fix: Clone output to avoid in-place modification errors
+        self.activations = output.clone()
 
     def save_gradient(self, module, grad_input, grad_output):
         # grad_output is a tuple, we take the first element (gradients w.r.t. the output of the layer)

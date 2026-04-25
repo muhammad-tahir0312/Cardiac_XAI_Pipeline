@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import os
 import numpy as np
@@ -29,6 +30,18 @@ class DiceLoss(nn.Module):
         
         dice_score = (2. * intersection + 1e-6) / (cardinality + 1e-6)
         return 1. - torch.mean(dice_score)
+
+class FocalLoss(nn.Module):
+    def __init__(self, gamma=2.0, alpha=None):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+
+    def forward(self, inputs, target):
+        ce_loss = F.cross_entropy(inputs, target, reduction='none', weight=self.alpha)
+        pt = torch.exp(-ce_loss)
+        focal_loss = (1 - pt) ** self.gamma * ce_loss
+        return torch.mean(focal_loss)
 
 def calculate_clinical_metrics(pred, target):
     """
@@ -124,8 +137,10 @@ def train(args):
     
     # Hybrid Loss (CE + Dice) with class weighting for imbalanced cardiac structures
     # Background is huge, RV/Myo/LV are small — weight them higher
-    class_weights = torch.tensor([0.1, 1.0, 1.0, 1.0], dtype=torch.float32).to(device)
-    ce_loss = nn.CrossEntropyLoss(weight=class_weights)
+    # Refined SOTA Hybrid Loss (Focal + Dice)
+    # Background weight increased slightly for stability
+    class_weights = torch.tensor([0.2, 1.0, 1.0, 1.0], dtype=torch.float32).to(device)
+    focal_loss = FocalLoss(gamma=2.0, alpha=class_weights)
     dice_loss = DiceLoss(n_classes=4)
     
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
@@ -161,7 +176,7 @@ def train(args):
             optimizer.zero_grad()
             outputs = model(images)
             
-            loss = 0.4 * ce_loss(outputs, masks) + 0.6 * dice_loss(outputs, masks)
+            loss = 0.3 * focal_loss(outputs, masks) + 0.7 * dice_loss(outputs, masks)
             loss.backward()
             
             # Gradient clipping to prevent spikes
@@ -185,7 +200,7 @@ def train(args):
                 masks = batch['mask'].to(device).long()
                 outputs = model(images)
                 
-                loss = 0.4 * ce_loss(outputs, masks) + 0.6 * dice_loss(outputs, masks)
+                loss = 0.4 * focal_loss(outputs, masks) + 0.6 * dice_loss(outputs, masks)
                 val_loss += loss.item()
                 
                 # Clinical Metrics

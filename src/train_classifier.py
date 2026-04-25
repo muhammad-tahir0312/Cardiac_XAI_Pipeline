@@ -24,7 +24,8 @@ def prepare_data(dataset):
             feats["LV_EDV"], feats["LV_ESV"], feats["LV_SV"], feats["LV_EF"],
             feats["RV_EDV"], feats["RV_ESV"], feats["RV_SV"], feats["RV_EF"],
             feats["Myo_Mass"], feats["LV_RV_Ratio"], feats["Mass_Vol_Ratio"],
-            feats["RWT"], feats["LVEDVi"], feats["LVESVi"], feats["SVi"], feats["Massi"]
+            feats["RWT"], feats["LVEDVi"], feats["LVESVi"], feats["SVi"], feats["Massi"],
+            feats["Myo_Thickening"], feats["RV_FAC"]
         ])
         y.append(patient["diagnosis"])
         ids.append(patient["patient_id"])
@@ -59,7 +60,7 @@ def train_xgboost():
     }
     
     model_search = RandomizedSearchCV(
-        xgb, param_distributions=param_grid, n_iter=20, 
+        xgb, param_distributions=param_grid, n_iter=50, 
         cv=5, scoring='accuracy', n_jobs=-1, random_state=42
     )
     model_search.fit(X_train, y_train_enc)
