@@ -30,7 +30,10 @@ def run_pipeline(patient_idx=0):
         # Using a slice from ED frame
         mid_slice_idx = len(patient["ed_mask"]) // 2
         slice_np = patient["ed_image"][mid_slice_idx].astype(np.float32)
-        slice_np = (slice_np - np.min(slice_np)) / (np.max(slice_np) - np.min(slice_np) + 1e-8)
+        # Normalize with Z-score (matching dataloader)
+        mean = np.mean(slice_np)
+        std = np.std(slice_np) + 1e-8
+        slice_np = (slice_np - mean) / std
         input_slice = torch.from_numpy(slice_np).to(device)
         visualize_feature_maps(model_seg, input_slice)
     else:
@@ -43,7 +46,7 @@ def run_pipeline(patient_idx=0):
     # Segmentation Visualization: MRI Image vs GT Mask vs Model Prediction
     mid = len(ed_mask) // 2
     mri_slice = patient["ed_image"][mid].astype(np.float32)
-    mri_slice = (mri_slice - np.min(mri_slice)) / (np.max(mri_slice) - np.min(mri_slice) + 1e-8)
+    mri_slice = (mri_slice - np.mean(mri_slice)) / (np.std(mri_slice) + 1e-8)
     gt_mask = ed_mask[mid]
     
     if os.path.exists(config.SEG_MODEL_PATH):
@@ -64,7 +67,7 @@ def run_pipeline(patient_idx=0):
                            save_name=f"seg_viz_{p_id}.png")
     
     # 3. Feature Extraction
-    features = extract_patient_features(ed_mask, es_mask, patient["spacing"])
+    features = extract_patient_features(ed_mask, es_mask, patient["spacing"], bsa=patient["bsa"])
     print("\nExtracted Features:")
     for k, v in features.items():
         print(f"{k}: {v:.2f}")
@@ -76,7 +79,8 @@ def run_pipeline(patient_idx=0):
         feature_vector = np.array([[
             features["LV_EDV"], features["LV_ESV"], features["LV_SV"], features["LV_EF"],
             features["RV_EDV"], features["RV_ESV"], features["RV_SV"], features["RV_EF"],
-            features["Myo_Mass"], features["LV_RV_Ratio"], features["Mass_Vol_Ratio"]
+            features["Myo_Mass"], features["LV_RV_Ratio"], features["Mass_Vol_Ratio"],
+            features["RWT"], features["LVEDVi"], features["LVESVi"], features["SVi"], features["Massi"]
         ]])
         prediction_idx = clf.predict(feature_vector)[0]
         # Decode label
@@ -100,17 +104,23 @@ def run_pipeline(patient_idx=0):
         model.load_state_dict(torch.load(densenet_path, map_location=device))
         model.eval()
         
-        # Prep input (single slice for demo)
+        # Prep input (ED and ES mid-slices)
         mid_idx = len(patient["ed_image"]) // 2
-        input_slice = patient["ed_image"][mid_idx].astype(np.float32)
-        # Normalize
-        input_slice = (input_slice - np.min(input_slice)) / (np.max(input_slice) - np.min(input_slice) + 1e-8)
-        input_tensor = torch.from_numpy(input_slice).unsqueeze(0).unsqueeze(0).to(device)
+        ed_slice = patient["ed_image"][mid_idx].astype(np.float32)
+        es_slice = patient["es_image"][mid_idx].astype(np.float32)
+        
+        # Normalize both (matching dataloader)
+        def norm(s):
+            m, st = np.mean(s), np.std(s) + 1e-8
+            return (s - m) / st
+            
+        input_combined = np.stack([norm(ed_slice), norm(es_slice)], axis=0)
+        input_tensor = torch.from_numpy(input_combined).unsqueeze(0).to(device)
         
         with torch.no_grad():
             output = model(input_tensor)
             _, pred_idx = torch.max(output, 1)
-            class_map_inv = {0: "NOR", 1: "MINF", 2: "DCM", 3: "HCM", 4: "ARV"}
+            class_map_inv = {0: "NOR", 1: "MINF", 2: "DCM", 3: "HCM", 4: "RV"}
             print(f"[DenseNet Model] Prediction: {class_map_inv.get(pred_idx.item(), 'UNKNOWN')}")
             
         # 6. Grad-CAM
@@ -123,11 +133,11 @@ def run_pipeline(patient_idx=0):
         # Save visualization
         plt.figure(figsize=(10, 5))
         plt.subplot(1, 2, 1)
-        plt.imshow(input_slice, cmap='gray')
-        plt.title("Original MRI Slice")
+        plt.imshow(ed_slice, cmap='gray')
+        plt.title("ED Slice")
         plt.subplot(1, 2, 2)
-        plt.imshow(input_slice, cmap='gray')
-        plt.imshow(heatmap, cmap='jet', alpha=0.5)
+        plt.imshow(ed_slice, cmap='gray')
+        plt.imshow(heatmap[0], cmap='jet', alpha=0.5) # heatmap[0] for ED view
         plt.title("Grad-CAM Focus")
         plt.savefig(config.GRADCAM_PLOT_PATH)
         print(f"Grad-CAM result saved to {config.GRADCAM_PLOT_PATH}")

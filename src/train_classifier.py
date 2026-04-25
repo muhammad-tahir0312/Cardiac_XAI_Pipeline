@@ -4,6 +4,7 @@ import numpy as np
 from xgboost import XGBClassifier
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report, accuracy_score
+from sklearn.model_selection import RandomizedSearchCV
 import joblib
 
 from dataloader import ACDC_PatientDataset
@@ -18,11 +19,12 @@ def prepare_data(dataset):
     print(f"Extracting features for {len(dataset)} patients...")
     for i in range(len(dataset)):
         patient = dataset[i]
-        feats = extract_patient_features(patient["ed_mask"], patient["es_mask"], patient["spacing"])
+        feats = extract_patient_features(patient["ed_mask"], patient["es_mask"], patient["spacing"], bsa=patient["bsa"])
         X.append([
             feats["LV_EDV"], feats["LV_ESV"], feats["LV_SV"], feats["LV_EF"],
             feats["RV_EDV"], feats["RV_ESV"], feats["RV_SV"], feats["RV_EF"],
-            feats["Myo_Mass"], feats["LV_RV_Ratio"], feats["Mass_Vol_Ratio"]
+            feats["Myo_Mass"], feats["LV_RV_Ratio"], feats["Mass_Vol_Ratio"],
+            feats["RWT"], feats["LVEDVi"], feats["LVESVi"], feats["SVi"], feats["Massi"]
         ])
         y.append(patient["diagnosis"])
         ids.append(patient["patient_id"])
@@ -43,20 +45,26 @@ def train_xgboost():
     y_train_enc = le.fit_transform(y_train)
     y_val_enc = le.transform(y_val)
     
-    # 3. Train XGBoost
-    print("\nTraining XGBoost Classifier...")
-    # Using conservative parameters to prevent overfitting on small data
-    model = XGBClassifier(
-        n_estimators=100,
-        max_depth=3,
-        learning_rate=0.1,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        random_state=42,
-        use_label_encoder=False,
-        eval_metric='mlogloss'
+    # 3. Train XGBoost with Hyperparameter Tuning
+    print("\nTraining XGBoost Classifier with RandomizedSearchCV...")
+    xgb = XGBClassifier(eval_metric='mlogloss', random_state=42)
+    
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'max_depth': [3, 4, 5, 6],
+        'learning_rate': [0.01, 0.05, 0.1, 0.2],
+        'subsample': [0.7, 0.8, 0.9],
+        'colsample_bytree': [0.7, 0.8, 0.9],
+        'gamma': [0, 0.1, 0.2]
+    }
+    
+    model_search = RandomizedSearchCV(
+        xgb, param_distributions=param_grid, n_iter=20, 
+        cv=5, scoring='accuracy', n_jobs=-1, random_state=42
     )
-    model.fit(X_train, y_train_enc)
+    model_search.fit(X_train, y_train_enc)
+    model = model_search.best_estimator_
+    print(f"Best Parameters: {model_search.best_params_}")
     
     # 4. Evaluate
     y_pred_enc = model.predict(X_val)

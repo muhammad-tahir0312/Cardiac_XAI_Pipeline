@@ -1,7 +1,20 @@
+# Cardiac XAI Pipeline: Automated Diagnosis & Interpretability
+
+This project implements a state-of-the-art pipeline for **Automated Cardiac Diagnosis** from MRI scans. It leverages deep learning for segmentation and disease classification, integrated with **Explainable AI (XAI)** frameworks (SHAP and Grad-CAM) for clinical transparency.
+
+## 🚀 Quick Start
+
+### 1. Activate Environment
+Always run the pipeline within the provided virtual environment:
+```bash
 source /home/tahir/Automated-Cardiac-Segmentation-and-Disease-Diagnosis/venv/bin/activate
+```
 
+### 2. Run Full Pipeline
+To run the entire training and inference process:
+```bash
 bash scripts/run_full_pipeline.sh
-
+```
 # 1. Train the Ensemble Diagnosis model (Fast)
 python src/train_classifier.py
 
@@ -13,58 +26,43 @@ python src/train_densenet.py
 
 python src/predict.py
 
+---
 
-# Cardiac XAI Pipeline
+## 🛠️ Pipeline Architecture
 
-This project implements a complete pipeline for Automated Cardiac Diagnosis from MRI scans using Explainable AI (XAI) frameworks (SHAP and Grad-CAM). It is designed for the INTRAC 2026 transdisciplinary conference.
+1.  **Segmentation (UNet)**: A high-capacity PyTorch UNet segments the Left Ventricle (LV), Right Ventricle (RV), and Myocardium. Now enhanced with **Z-score normalization** and increased feature channels.
+2.  **Clinical Feature Engineering**:
+    *   **BSA Indexing**: All volumes are indexed by **Body Surface Area (BSA)** calculated from patient height/weight.
+    *   **New Metrics**: Includes **Relative Wall Thickness (RWT)** and Stroke Volume Index (**SVi**).
+3.  **Diagnosis Models**:
+    *   **Ensemble (XGBoost)**: Optimized with `RandomizedSearchCV` on clinical features.
+    *   **Deep Learning (DenseNet121)**: Trained on MRI slices with class-weighted loss.
+4.  **Explainability (XAI)**:
+    *   **SHAP**: Quantifies clinical feature contribution to each diagnosis.
+    *   **Grad-CAM**: Provides heatmaps of neural network focus on MRI slices.
 
-## Architecture
-
-1.  **Segmentation:** PyTorch UNet (adapted from SSL4MIS) segments the Left Ventricle, Right Ventricle, and Myocardium.
-2.  **Feature Extraction:** Clinical metrics (EF, EDV, ESV, Mass) are extracted from the generated masks.
-3.  **Diagnosis:**
-    *   **Ensemble Classifier:** A Random Forest trained on clinical features (High Accuracy & Interpretability).
-    *   **Deep Classifier:** A DenseNet121 trained directly on MRI slices.
-4.  **Explainability:**
-    *   **SHAP:** Justifies the diagnosis based on clinical features.
-    *   **Grad-CAM:** Visualizes where the neural network is focusing on the MRI scans.
-
-## Project Structure
+## 📁 Project Structure
 
 ```text
 src/
-├── dataloader.py       # ACDC dataset loader (SimpleITK)
-├── networks.py         # UNet and DenseNet architectures
-├── extract_features.py # Clinical metric calculations
-├── train_seg.py        # UNet segmentation training
-├── train_classifier.py # Random Forest diagnosis training
-├── train_densenet.py   # DenseNet diagnosis training
+├── dataloader.py       # ACDC dataset loader with BSA & Z-score normalization
+├── networks.py         # UNet and DenseNet architectures (Enhanced)
+├── extract_features.py # Clinical metric calculations (Indexed by BSA)
+├── train_seg.py        # Segmentation training with ReduceLROnPlateau
+├── train_classifier.py # XGBoost training with hyperparameter tuning
+├── train_densenet.py   # DenseNet training with class weights
 ├── explainers.py       # SHAP and Grad-CAM implementations
-└── predict.py          # End-to-end pipeline execution
-results/                # Saved models and XAI visualizations
-data/                   # Symlinked ACDC dataset
+└── predict.py          # End-to-end inference & visualization
+results/                # Saved models, metrics, and XAI visualizations
 ```
 
-## How to Run
+## 📊 Evaluation
+Results are saved to the `results/` folder:
+- `seg_history.json`: Training history for segmentation.
+- `seg_viz_*.png`: Visual proof of segmentation accuracy.
+- `gradcam_result.png`: Explainability focus map.
+- `clinical_distributions.png`: Statistical separation of cardiac diseases.
+- `confusion_matrix.png`: Diagnostic performance metrics.
 
-### 1. Requirements
-Ensure you are using the provided virtual environment or have the following installed:
-`torch`, `torchvision`, `SimpleITK`, `numpy`, `scikit-learn`, `shap`, `matplotlib`, `joblib`, `tqdm`.
-
-### 2. Training
-Run the training scripts in order:
-```bash
-python src/train_seg.py         # Train Segmentation
-python src/train_classifier.py  # Train Ensemble Diagnosis
-python src/train_densenet.py    # Train Deep Diagnosis
-```
-
-### 3. Prediction & XAI
-Run the end-to-end prediction and visualization:
-```bash
-python src/predict.py
-```
-
-## Results
-- Check `results/` for the trained models (`.pth` and `.joblib`).
-- Check `results/shap_summary.png` for the clinical feature importance chart.
+---
+*Designed for the **INTRAC 2026** Transdisciplinary Conference.*

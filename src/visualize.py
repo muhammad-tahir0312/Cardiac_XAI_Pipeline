@@ -150,7 +150,7 @@ def plot_clinical_boxplots(X, y, feature_names, save_name="clinical_distribution
     plt.figure(figsize=(20, 5 * rows))
     for i, col in enumerate(feature_names):
         plt.subplot(rows, cols, i+1)
-        sns.boxplot(x='Diagnosis', y=col, data=df, palette='Set2')
+        sns.boxplot(x='Diagnosis', y=col, data=df, hue='Diagnosis', palette='Set2', legend=False)
         plt.title(f"Distribution of {col}")
         
     plt.tight_layout()

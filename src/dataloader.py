@@ -67,7 +67,10 @@ class ACDC_Dataset(Dataset):
         # ACDC images vary in size (e.g. 256x216, 216x256, etc.)
         image = self._pad_or_crop(image, (256, 256))
         mask = self._pad_or_crop(mask, (256, 256))
-        image = (image - np.min(image)) / (np.max(image) - np.min(image) + 1e-8)
+        # Z-score normalization for more stable training
+        mean = np.mean(image)
+        std = np.std(image) + 1e-8
+        image = (image - mean) / std
         
         sample = {
             'image': image, 'mask': mask,
@@ -108,11 +111,20 @@ class ACDC_PatientDataset:
         p_id = os.path.basename(p_dir)
         info_file = os.path.join(p_dir, "Info.cfg")
         
-        diagnosis = "UNKNOWN"
+        height = 0.0
+        weight = 0.0
         with open(info_file, 'r') as f:
             for line in f:
                 if line.startswith("Group:"):
                     diagnosis = line.split(":")[1].strip()
+                if line.startswith("Height:"):
+                    height = float(line.split(":")[1].strip())
+                if line.startswith("Weight:"):
+                    weight = float(line.split(":")[1].strip())
+        
+        # Calculate BSA (Mosteller formula)
+        # BSA = sqrt( (height_cm * weight_kg) / 3600 )
+        bsa = np.sqrt((height * weight) / 3600.0) if height > 0 and weight > 0 else 1.7 # Default 1.7 if missing
         
         all_files = os.listdir(p_dir)
         images = sorted([f for f in all_files if f.endswith(".nii.gz") and "_gt" not in f and "_4d" not in f])
@@ -130,8 +142,73 @@ class ACDC_PatientDataset:
             "es_image": sitk.GetArrayFromImage(es_img_itk),
             "ed_mask": sitk.GetArrayFromImage(ed_mask_itk),
             "es_mask": sitk.GetArrayFromImage(es_mask_itk),
-            "spacing": ed_img_itk.GetSpacing()
+            "spacing": ed_img_itk.GetSpacing(),
+            "bsa": bsa
         }
+
+class ACDC_DiagnosisDataset(Dataset):
+    """
+    Dataset for diagnosis that returns a pair of (ED, ES) slices
+    from the mid-ventricular region of each patient.
+    """
+    def __init__(self, root_dir, split="train_set"):
+        self.root_dir = os.path.join(root_dir, split)
+        self.patient_dirs = sorted(glob.glob(os.path.join(self.root_dir, "patient*")))
+        self.class_map = {"NOR": 0, "MINF": 1, "DCM": 2, "HCM": 3, "RV": 4}
+        
+    def __len__(self):
+        return len(self.patient_dirs)
+
+    def __getitem__(self, idx):
+        p_dir = self.patient_dirs[idx]
+        info_file = os.path.join(p_dir, "Info.cfg")
+        
+        # Parse diagnosis and clinical info
+        height, weight, diagnosis = 0.0, 0.0, "UNKNOWN"
+        with open(info_file, 'r') as f:
+            for line in f:
+                if line.startswith("Group:"): diagnosis = line.split(":")[1].strip()
+                if line.startswith("Height:"): height = float(line.split(":")[1].strip())
+                if line.startswith("Weight:"): weight = float(line.split(":")[1].strip())
+        
+        all_files = os.listdir(p_dir)
+        images = sorted([f for f in all_files if f.endswith(".nii.gz") and "_gt" not in f and "_4d" not in f])
+        
+        ed_itk = sitk.ReadImage(os.path.join(p_dir, images[0]))
+        es_itk = sitk.ReadImage(os.path.join(p_dir, images[1]))
+        
+        ed_vol = sitk.GetArrayFromImage(ed_itk)
+        es_vol = sitk.GetArrayFromImage(es_itk)
+        
+        # Take the middle slice (mid-ventricular is best for diagnosis)
+        mid_idx = ed_vol.shape[0] // 2
+        ed_slice = ed_vol[mid_idx].astype(np.float32)
+        es_slice = es_vol[mid_idx].astype(np.float32)
+        
+        # Standard Resize & Z-score Normalization
+        ed_slice = self._preprocess(ed_slice)
+        es_slice = self._preprocess(es_slice)
+        
+        # Stack as 2 channels (ED, ES)
+        combined = np.stack([ed_slice, es_slice], axis=0) # (2, 256, 256)
+        
+        return {
+            "image": torch.from_numpy(combined),
+            "label": self.class_map.get(diagnosis, 0),
+            "patient_id": os.path.basename(p_dir)
+        }
+
+    def _preprocess(self, slice_np):
+        # Resize/Pad to 256x256
+        h, w = slice_np.shape
+        ph, pw = max(0, 256 - h), max(0, 256 - w)
+        slice_np = np.pad(slice_np, ((ph//2, ph-ph//2), (pw//2, pw-pw//2)), mode='constant')
+        sh, sw = (slice_np.shape[0] - 256) // 2, (slice_np.shape[1] - 256) // 2
+        slice_np = slice_np[sh:sh+256, sw:sw+256]
+        
+        # Z-score
+        mean, std = np.mean(slice_np), np.std(slice_np) + 1e-8
+        return (slice_np - mean) / std
 
 if __name__ == "__main__":
     dataset_path = "/home/tahir/Cardiac_XAI_Pipeline/data"

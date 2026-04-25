@@ -81,10 +81,10 @@ class Decoder(nn.Module):
         self.n_class = self.params['class_num']
         assert (len(self.ft_chns) == 5)
 
-        self.up1 = UpBlock(self.ft_chns[4], self.ft_chns[3], self.ft_chns[3], dropout_p=0.0)
-        self.up2 = UpBlock(self.ft_chns[3], self.ft_chns[2], self.ft_chns[2], dropout_p=0.0)
-        self.up3 = UpBlock(self.ft_chns[2], self.ft_chns[1], self.ft_chns[1], dropout_p=0.0)
-        self.up4 = UpBlock(self.ft_chns[1], self.ft_chns[0], self.ft_chns[0], dropout_p=0.0)
+        self.up1 = UpBlock(self.ft_chns[4], self.ft_chns[3], self.ft_chns[3], dropout_p=0.0, bilinear=params.get('bilinear', True))
+        self.up2 = UpBlock(self.ft_chns[3], self.ft_chns[2], self.ft_chns[2], dropout_p=0.0, bilinear=params.get('bilinear', True))
+        self.up3 = UpBlock(self.ft_chns[2], self.ft_chns[1], self.ft_chns[1], dropout_p=0.0, bilinear=params.get('bilinear', True))
+        self.up4 = UpBlock(self.ft_chns[1], self.ft_chns[0], self.ft_chns[0], dropout_p=0.0, bilinear=params.get('bilinear', True))
 
         self.out_conv = nn.Conv2d(self.ft_chns[0], self.n_class, kernel_size=3, padding=1)
 
@@ -102,7 +102,7 @@ class UNet(nn.Module):
         super(UNet, self).__init__()
         params = {
             'in_chns': in_chns,
-            'feature_chns': [16, 32, 64, 128, 256],
+            'feature_chns': [32, 64, 128, 256, 512],
             'dropout': [0.05, 0.1, 0.2, 0.3, 0.5],
             'class_num': class_num,
             'bilinear': False
@@ -129,7 +129,7 @@ class DenseNetDiagnosis(nn.Module):
         
         # Adjust input layer for 1-channel MRI images (instead of 3-channel RGB)
         original_conv = self.densenet.features.conv0
-        self.densenet.features.conv0 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.densenet.features.conv0 = nn.Conv2d(2, 64, kernel_size=7, stride=2, padding=3, bias=False)
         
         # Replace final fully connected layer
         num_ftrs = self.densenet.classifier.in_features

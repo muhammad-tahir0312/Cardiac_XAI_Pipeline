@@ -7,6 +7,7 @@ import numpy as np
 from tqdm import tqdm
 import json
 import random
+import argparse
 
 from dataloader import ACDC_Dataset
 from networks import UNet
@@ -101,11 +102,11 @@ def augment_batch(images, masks):
     
     return torch.stack(augmented_images), torch.stack(augmented_masks)
 
-def train():
+def train(args):
     # Hyperparameters
     batch_size = config.SEG_BATCH_SIZE
-    lr = config.SEG_LR
-    epochs = config.SEG_EPOCHS
+    lr = args.lr if args.lr else config.SEG_LR
+    epochs = args.epochs if args.epochs else config.SEG_EPOCHS
     device = config.DEVICE
     
     # Dataset
@@ -128,7 +129,8 @@ def train():
     dice_loss = DiceLoss(n_classes=4)
     
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
     
     print(f"Starting Fine-tuned Segmentation Training on {device}...")
     print(f"  Batch Size: {batch_size} | LR: {lr} | Epochs: {epochs}")
@@ -137,7 +139,7 @@ def train():
     best_val_dice = 0.0
     best_val_loss = float('inf')
     patience_counter = 0
-    early_stop_patience = 15
+    early_stop_patience = 20
     
     history = {
         'train_loss': [],
@@ -168,7 +170,7 @@ def train():
             optimizer.step()
             train_loss += loss.item()
         
-        scheduler.step()
+        # scheduler.step() is now called after validation with the metric
             
         # Validation
         model.eval()
@@ -214,6 +216,9 @@ def train():
         current_lr = optimizer.param_groups[0]['lr']
         print(f"Epoch {epoch+1}: Loss(T/V): {avg_train_loss:.3f}/{avg_val_loss:.3f} | Dice: {avg_dice:.3f} | HD: {avg_hd:.1f}mm | LR: {current_lr:.6f}")
         
+        # Step the scheduler based on validation Dice
+        scheduler.step(avg_dice)
+        
         # Save best model (track by Dice, not loss — more clinically meaningful)
         if avg_dice > best_val_dice:
             best_val_dice = avg_dice
@@ -234,4 +239,8 @@ def train():
     print(f"\nTraining Complete! Best Dice: {best_val_dice:.4f}")
 
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--epochs", type=int, help="Number of training epochs")
+    parser.add_argument("--lr", type=float, help="Learning rate")
+    args = parser.parse_args()
+    train(args)
