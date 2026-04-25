@@ -9,13 +9,34 @@ import config
 # Silence SimpleITK warnings about NIfTI scales
 sitk.ProcessObject.SetGlobalWarningDisplay(False)
 
+import config
+from sklearn.model_selection import KFold
+
+def get_patient_splits(root_dir, n_splits=5, seed=42):
+    """
+    Unified splitting logic for 5-fold cross-validation.
+    Combines train and validation sets for a pool of patients.
+    """
+    all_patients = []
+    for split in ["train_set", "validation_set"]:
+        p_path = os.path.join(root_dir, split)
+        if os.path.exists(p_path):
+            all_patients.extend(sorted(glob.glob(os.path.join(p_path, "patient*"))))
+    
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    return list(kf.split(all_patients)), all_patients
+
 class ACDC_Dataset(Dataset):
     """
     Standard dataset for 3D frames (one item per frame)
     """
-    def __init__(self, root_dir, split="train_set", transform=None):
-        self.root_dir = os.path.join(root_dir, split)
-        self.patient_dirs = sorted(glob.glob(os.path.join(self.root_dir, "patient*")))
+    def __init__(self, root_dir, fold=0, mode="train", transform=None):
+        splits, all_patients = get_patient_splits(root_dir)
+        train_idx, val_idx = splits[fold]
+        
+        target_indices = train_idx if mode == "train" else val_idx
+        self.patient_dirs = [all_patients[i] for i in target_indices]
+        
         self.transform = transform
         self.data_items = []
         
@@ -100,9 +121,11 @@ class ACDC_PatientDataset:
     """
     Dataset that returns both ED and ES frames for a single patient (for diagnosis)
     """
-    def __init__(self, root_dir, split="train_set"):
-        self.root_dir = os.path.join(root_dir, split)
-        self.patient_dirs = sorted(glob.glob(os.path.join(self.root_dir, "patient*")))
+    def __init__(self, root_dir, fold=0, mode="train"):
+        splits, all_patients = get_patient_splits(root_dir)
+        train_idx, val_idx = splits[fold]
+        target_indices = train_idx if mode == "train" else val_idx
+        self.patient_dirs = [all_patients[i] for i in target_indices]
         
     def __len__(self):
         return len(self.patient_dirs)
@@ -152,9 +175,11 @@ class ACDC_DiagnosisDataset(Dataset):
     Dataset for diagnosis that returns a pair of (ED, ES) slices
     from the mid-ventricular region of each patient.
     """
-    def __init__(self, root_dir, split="train_set"):
-        self.root_dir = os.path.join(root_dir, split)
-        self.patient_dirs = sorted(glob.glob(os.path.join(self.root_dir, "patient*")))
+    def __init__(self, root_dir, fold=0, mode="train"):
+        splits, all_patients = get_patient_splits(root_dir)
+        train_idx, val_idx = splits[fold]
+        target_indices = train_idx if mode == "train" else val_idx
+        self.patient_dirs = [all_patients[i] for i in target_indices]
         self.class_map = config.DIAGNOSIS_MAP
         
     def __len__(self):

@@ -13,88 +13,68 @@ from networks import DenseNetDiagnosis
 import config
 
 def train_densenet(args):
-    # Hyperparameters
     batch_size = config.DENSE_BATCH_SIZE
     lr = args.lr if args.lr else config.DENSE_LR
     epochs = args.epochs if args.epochs else config.DENSE_EPOCHS
     device = config.DEVICE
-    
-    # Dataset (patient-based pair of ED/ES for DenseNet)
     dataset_path = config.DATA_DIR
-    train_dataset = ACDC_DiagnosisDataset(root_dir=dataset_path, split="train_set")
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     
-    val_dataset = ACDC_DiagnosisDataset(root_dir=dataset_path, split="validation_set")
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    
-    # Class mapping for diagnosis
-    class_map = config.DIAGNOSIS_MAP
-    
-    # Calculate class weights for imbalance
-    # We can just iterate once or use a fixed weight if data is balanced enough
-    # For ACDC, it's fairly balanced (20 patients per group)
-    class_weights = torch.tensor([1.0, 1.0, 1.0, 1.0, 1.0], dtype=torch.float32).to(device)
-    
-    # Model, Loss, Optimizer
-    model = DenseNetDiagnosis(class_num=5).to(device)
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-    
-    print(f"Starting Multi-View DenseNet training on {device}...")
-    best_val_acc = 0.0
-    
-    for epoch in range(epochs):
-        # Training Phase
-        model.train()
-        train_loss = 0
-        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]"):
-            images = batch['image'].to(device) # (B, 2, 256, 256)
-            labels = batch['label'].to(device)
-            
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-            train_loss += loss.item()
+    for fold in range(5):
+        print(f"\n" + "="*40)
+        print(f"   TRAINING DENSENET FOLD {fold}")
+        print(f"="*40)
         
-        scheduler.step()
+        # Dataset
+        train_dataset = ACDC_DiagnosisDataset(root_dir=dataset_path, fold=fold, mode="train")
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         
-        # Validation Phase
-        model.eval()
-        val_loss = 0
-        all_preds = []
-        all_labels = []
+        val_dataset = ACDC_DiagnosisDataset(root_dir=dataset_path, fold=fold, mode="val")
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
         
-        with torch.no_grad():
-            for batch in val_loader:
+        # Model
+        model = DenseNetDiagnosis(class_num=5).to(device)
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
+        
+        best_val_acc = 0.0
+        fold_model_path = config.DENSE_MODEL_PATH.replace(".pth", f"_fold{fold}.pth")
+        
+        for epoch in range(epochs):
+            model.train()
+            train_loss = 0
+            for batch in tqdm(train_loader, desc=f"Fold {fold} Epoch {epoch+1}/{epochs}"):
                 images = batch['image'].to(device)
                 labels = batch['label'].to(device)
+                
+                optimizer.zero_grad()
                 outputs = model(images)
-                
                 loss = criterion(outputs, labels)
-                val_loss += loss.item()
-                
-                preds = torch.argmax(outputs, dim=1).cpu().numpy()
-                all_preds.extend(preds)
-                all_labels.extend(labels.cpu().numpy())
-        
-        avg_train_loss = train_loss / len(train_loader)
-        avg_val_loss = val_loss / len(val_loader)
-        val_acc = accuracy_score(all_labels, all_preds)
-        
-        print(f"Epoch {epoch+1}: Loss(T/V): {avg_train_loss:.4f}/{avg_val_loss:.4f} | Val Acc: {val_acc:.4f}")
-        
-        # Save best model
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            save_path = config.DENSE_MODEL_PATH
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            torch.save(model.state_dict(), save_path)
-            print(f"--> Saved Best Multi-View DenseNet (Acc: {best_val_acc:.4f})")
-
-    print(f"\nMulti-View DenseNet Training Complete! Best Val Acc: {best_val_acc:.4f}")
+                loss.backward()
+                optimizer.step()
+                train_loss += loss.item()
+            
+            # Validation
+            model.eval()
+            all_preds = []
+            all_labels = []
+            with torch.no_grad():
+                for batch in val_loader:
+                    images = batch['image'].to(device)
+                    labels = batch['label'].to(device)
+                    outputs = model(images)
+                    preds = torch.argmax(outputs, dim=1).cpu().numpy()
+                    all_preds.extend(preds)
+                    all_labels.extend(labels.cpu().numpy())
+            
+            val_acc = accuracy_score(all_labels, all_preds)
+            print(f"Epoch {epoch+1}: Val Acc: {val_acc:.4f}")
+            
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                torch.save(model.state_dict(), fold_model_path)
+                print(f"--> Saved Best Multi-View DenseNet for Fold {fold} (Acc: {best_val_acc:.4f})")
+    
+    print(f"\nAll Folds DenseNet Training Complete!")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
