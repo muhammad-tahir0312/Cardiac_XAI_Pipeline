@@ -1,50 +1,70 @@
 #!/bin/bash
+# =============================================================================
+#  Cardiac XAI Pipeline — Full 5-Fold Training + Inference
+#  Venue : INTRAC 2026  |  Universiti Malaya FSKTM
+#  Author: Muhammad Tahir student in FSKTM, UM
+# =============================================================================
 
-# Ensure we are in the project root
+set -euo pipefail   # exit on error, undefined variable, or pipe failure
+
 PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
-cd "$PROJECT_DIR"
-
-# CRITICAL: Add src to PYTHONPATH so scripts can find dataloader/config/networks
-export PYTHONPATH=$PYTHONPATH:$PROJECT_DIR/src
-
-# Virtual Environment Path
-VENV_PATH="/home/tahir/Automated-Cardiac-Segmentation-and-Disease-Diagnosis/venv"
+SRC_DIR="$PROJECT_DIR/src"
+VENV_PATH="$PROJECT_DIR/venv"
 
 echo "===================================================="
-echo "   Cardiac XAI Pipeline: 5-FOLD K-FOLD SYSTEM       "
+echo "   Cardiac XAI Pipeline: 5-FOLD CROSS-VALIDATION   "
 echo "   Venue: INTRAC 2026 | UM FSKTM                    "
+echo "   Project root : $PROJECT_DIR"
+echo "   Source dir   : $SRC_DIR"
 echo "===================================================="
 
-# Check if virtual environment is active, if not, try to activate it
-if [[ "$VIRTUAL_ENV" == "" ]]; then
+if [[ "${VIRTUAL_ENV:-}" == "" ]]; then
     if [ -f "$VENV_PATH/bin/activate" ]; then
-        echo "Activating virtual environment..."
+        echo "Activating virtual environment at $VENV_PATH …"
+        # shellcheck disable=SC1091
         source "$VENV_PATH/bin/activate"
     else
         echo "WARNING: Virtual environment not found at $VENV_PATH."
-        echo "Proceeding with system python (ensure dependencies are installed)."
+        echo "Proceeding with system Python (ensure all dependencies are installed)."
     fi
 fi
 
-# 1. Train Segmentation (5 Folds)
-echo -e "\n[Step 1/3] Training 5-Fold UNet Segmentation Models..."
-python3 src/train_seg.py --epochs 30
+cd "$PROJECT_DIR"
 
-# 2. Train Ensemble Classifier (5 Folds)
-echo -e "\n[Step 2/3] Training 5-Fold XGBoost Classifiers (Clinical Pathway)..."
-echo "Note: This step extracts features from predicted masks (Zero Leakage)."
-python3 src/train_classifier.py
+export PYTHONPATH="${PYTHONPATH:-}:$SRC_DIR"
 
-# 3. Train Image Diagnosis (5 Folds)
-echo -e "\n[Step 3/3] Training 5-Fold Multi-View DenseNet Models..."
-python3 src/train_densenet.py --epochs 30
+# --------------------------------------------------------------------------- #
+# Step 1 — Segmentation (UNet, 5 folds)                                       #
+# --------------------------------------------------------------------------- #
+echo ""
+echo "[Step 1/4] Training 5-Fold UNet Segmentation Models …"
+python3 "$SRC_DIR/train_seg.py" --epochs 30
 
-# 4. Generate Predictions and XAI
-echo -e "\n[Inference] Running Final Pipeline (Fold 0, Patient 0)..."
-python3 src/predict.py --idx 0 --fold 0
+# --------------------------------------------------------------------------- #
+# Step 2 — Clinical Classifier (XGBoost, 5 folds, zero-leakage)              #
+# --------------------------------------------------------------------------- #
+echo ""
+echo "[Step 2/4] Training 5-Fold XGBoost Classifiers …"
+echo "           Features derived from predicted masks (zero-leakage)."
+python3 "$SRC_DIR/train_classifier.py"
 
-echo -e "\n===================================================="
-echo "   Pipeline Complete!                              "
-echo "   Models saved as: model_name_foldX.pth           "
-echo "   Check the /results folder for evaluation plots. "
+# --------------------------------------------------------------------------- #
+# Step 3 — Visual Classifier (DenseNet-121, 5 folds)                         #
+# --------------------------------------------------------------------------- #
+echo ""
+echo "[Step 3/4] Training 5-Fold DenseNet-121 Models …"
+python3 "$SRC_DIR/train_densenet.py" --epochs 30
+
+# --------------------------------------------------------------------------- #
+# Step 4 — Inference + XAI for fold 0, patient 0                             #
+# --------------------------------------------------------------------------- #
+echo ""
+echo "[Step 4/4] Running pipeline (fold=0, patient_idx=0) …"
+python3 "$SRC_DIR/predict.py" --idx 0 --fold 0
+
+echo ""
+echo "===================================================="
+echo "   Pipeline complete!"
+echo "   Models  → $PROJECT_DIR/models/"
+echo "   Results → $PROJECT_DIR/results/"
 echo "===================================================="

@@ -15,17 +15,6 @@ To run the entire training and inference process:
 ```bash
 bash scripts/run_full_pipeline.sh
 ```
-# 1. Train the Ensemble Diagnosis model (Fast)
-python src/train_classifier.py
-
-# 2. Train the Segmentation UNet (Slow - let it run)
-python src/train_seg.py
-
-# 3. Train the Deep Learning Diagnosis model (Slow - let it run)
-python src/train_densenet.py
-
-python src/predict.py
-
 ---
 
 ## 🛠️ Pipeline Architecture
